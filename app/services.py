@@ -132,30 +132,6 @@ class MovieService:
             for movie_res in response.json()["data"]
         ]
 
-        try:
-            response_log = response.json()
-        except json.decoder.JSONDecodeError:
-            response_log = response.text
-
-        logger.warning(
-            "Response Error, returning movies details with missing detail info",
-            status_code=response.status_code,
-            url=url,
-            response=response_log,
-        )
-
-        movies = []
-        for mid in movies_ids:
-            self.add_error(
-                Error(
-                    errorCode=440,
-                    message=f"Movie id #{mid} details can not be retrieved",
-                )
-            )
-            movies.append(self.MovieDetailsResponse(id=mid))
-
-        return movies
-
     def build_movie_details_from_response(
         self, response: MovieDetailsResponse
     ) -> List[Movie]:
