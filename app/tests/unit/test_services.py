@@ -91,8 +91,9 @@ class FakeRequestClient:
         (None, None, None, "http://localhost:3040/movies"),
     ),
 )
-def test__MovieService__list_ids__200(genre_name, offset, limit, expected_url):
-    movies_ids = list(range(10))
+def test__MovieService__list_ids__200(
+    genre_name, offset, limit, expected_url, movies_ids
+):
     client = FakeRequestClient(
         responses=[FakeResponse(response={"data": movies_ids}, status_code=200)]
     )
@@ -103,8 +104,7 @@ def test__MovieService__list_ids__200(genre_name, offset, limit, expected_url):
     assert client.url == expected_url
 
 
-def test__MovieService__list_ids__500_at_first_attempt():
-    movies_ids = list(range(10))
+def test__MovieService__list_ids__500_at_first_attempt(movies_ids):
     client = FakeRequestClient(
         responses=[
             FakeResponse(response=None, status_code=500),
@@ -116,3 +116,19 @@ def test__MovieService__list_ids__500_at_first_attempt():
 
     assert service.list_ids(genre) == movies_ids
     assert client.called == 2
+
+
+def test__MovieService__get_details__200_all_details(
+    movies_ids, movies_details
+):
+    client = FakeRequestClient(
+        responses=[
+            FakeResponse(
+                response={"data": movies_details},
+                status_code=200,
+            )
+        ]
+    )
+
+    assert MovieService(client).get_details(movies_ids) == movies_details
+

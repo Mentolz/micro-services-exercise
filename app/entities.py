@@ -6,6 +6,11 @@ class Genre(TypedDict):
     name: str
 
 
+class Error(TypedDict):
+    errorCode: int
+    message: str
+
+
 GENRES_MAP = [
     {"id": 28, "name": "Action"},
     {"id": 12, "name": "Adventure"},
