@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "test_backend-mentolz"
+version = "0.1.0"
+description = ""
+authors = ["Diogo Neto <diogo.neto@promptlyhealth.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.70.0"
+uvicorn = "^0.15.0"
+requests = "^2.26.0"
+pytest-xdist = "^2.4.0"
+structlog = "^21.1.0"
+colorama = "^0.4.4"
+
+[tool.poetry.dev-dependencies]
+black = {extras = ["d"], version = "^21.5b2"}
+isort = "^5.8.0"
+ipdb = "^0.13.9"
+pytest = "^6.2.4"
+mypy = "^0.910"
+flake8 = "^3.9.2"
+pytest-clarity = "^1.0.1"
+pytest-cov = "^2.12.1"
+pytest-forked = "^1.3.0"
+pytest-mock = "^3.6.1"
+pytest-pudb = "^0.7.0"
+pytest-xdist = "^2.3.0"
+pylint = "^2.10.2"
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
