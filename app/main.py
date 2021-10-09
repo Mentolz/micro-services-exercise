@@ -1,7 +1,8 @@
 from typing import Optional
 
 from fastapi import FastAPI
-from app import services
+import requests
+from app.services import MovieService
 
 app = FastAPI()
 
@@ -17,7 +18,8 @@ def list_movies(
     offset: Optional[int] = None,
     limit: Optional[int] = None,
 ):
+    service = MovieService(requests)
     if genre:
-        genre = services.get_genre(genre)
+        genre = service.get_genre(genre)
 
-    return services.list_movies_ids(genre, offset=offset, limit=limit)
+    return service.list(genre, offset=offset, limit=limit)
