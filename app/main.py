@@ -45,6 +45,10 @@ def list_movies(
 
     return MoviesOutput(
         data=DataMovies(movies=movies),
-        metadata=MetaData(offset=offset, limit=limit, total=total),
+        metadata=MetaData(
+            offset=offset,
+            limit=limit if total >= limit else total,
+            total=total
+        ),
         errors=errors,
     )

@@ -3,7 +3,7 @@ from typing_extensions import TypedDict
 import requests
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse, unquote
 from app.entities import Genre
-from app.entities import GENRES_MAP
+from app.entities import GENRES_MAP, GENDERS_MAP
 from structlog import get_logger
 from app.entities import Error
 from datetime import date
@@ -26,10 +26,12 @@ class BaseService:
     @staticmethod
     def request_until_status_code_is_200(client, url) -> dict:
         status_code = None
-        while status_code != 200:
+        count = 0
+        while status_code != 200 or count < 15:
             response = client.get(url)
             if (status_code := response.status_code) == 200:
                 break
+            count += 1
 
             logger.error(
                 "Response Error",
@@ -235,7 +237,6 @@ class MovieService(BaseService):
 
         return movies_details
 
-
 class CastService(BaseService):
     def get_details(self, cast_ids: List[int]) -> Optional[List[CastMember]]:
         cast: list = []
@@ -247,7 +248,7 @@ class CastService(BaseService):
                 cast += [
                     CastMember(
                         id=member["id"],
-                        gender=member["gender"],
+                        gender=GENDERS_MAP[int(member["gender"])],
                         name=member["name"],
                         profilePath=member["profilePath"],
                     )

@@ -11,6 +11,14 @@ class Error(TypedDict):
     message: str
 
 
+# NOTE: this mapping is not referenced in the exercise detailsor I couldn't find it, so I improvised :P
+GENDERS_MAP = {
+    0: "Unknown",
+    1: "Female",
+    2: "Male",
+}
+
+
 GENRES_MAP = [
     {"id": 28, "name": "Action"},
     {"id": 12, "name": "Adventure"},

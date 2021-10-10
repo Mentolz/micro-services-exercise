@@ -1,4 +1,5 @@
 from urllib.parse import unquote
+from app.entities import GENDERS_MAP
 
 from app.schemas import CastMember, Movie
 from app.services import BaseService, CastService, MovieService, get_genre
@@ -196,7 +197,7 @@ def test__CastService__get_details__incomplete_cast_details(vin_disiel):
                     "data": [
                         {
                             "id": vin_disiel.id,
-                            "gender": vin_disiel.gender,
+                            "gender": 2,
                             "name": vin_disiel.name,
                             "profilePath": vin_disiel.profilePath,
                         }
@@ -211,37 +212,41 @@ def test__CastService__get_details__incomplete_cast_details(vin_disiel):
     assert cast_service.errors
 
 
+def get_gender_from_name(name) -> int:
+    return list(GENDERS_MAP.keys())[list(GENDERS_MAP.values()).index(name)]
+
+
 def test__CastService__get_details__full_cast_details(vin_disiel):
     cast_ids = [1, 2, 3, 4, 5, 6]
 
     expected_result = [
         CastMember(
             id=1,
-            gender="M",
+            gender="Male",
             name="Paul Walker",
             profilePath="www.paul-walker.com",
         ),
         CastMember(
             id=2,
-            gender="F",
+            gender="Female",
             name="Jordana Brewster",
             profilePath="www.jordana-brewster.com",
         ),
         CastMember(
             id=3,
-            gender="F",
+            gender="Female",
             name="Michelle Rodriguez",
             profilePath="www.michelle.com",
         ),
         CastMember(
             id=4,
-            gender="F",
+            gender="Female",
             name="Gal Gadot",
             profilePath="www.gal-gadot.com",
         ),
         CastMember(
             id=5,
-            gender="M",
+            gender="Male",
             name="Dwayne Johnson",
             profilePath="www.dwayne-johnson.com",
         ),
@@ -256,7 +261,7 @@ def test__CastService__get_details__full_cast_details(vin_disiel):
                     "data": [
                         {
                             "id": member.id,
-                            "gender": member.gender,
+                            "gender": get_gender_from_name(member.gender),
                             "name": member.name,
                             "profilePath": member.profilePath,
                         }
@@ -270,7 +275,7 @@ def test__CastService__get_details__full_cast_details(vin_disiel):
                     "data": [
                         {
                             "id": member.id,
-                            "gender": member.gender,
+                            "gender": get_gender_from_name(member.gender),
                             "name": member.name,
                             "profilePath": member.profilePath,
                         }
@@ -306,32 +311,15 @@ def test__MovieService__get_details__couldnt_get_details(mocker):
     movies = movie_service.get_details(movies_ids)
     assert movies == [
         Movie(
-            id="1",
+            id=str(id_),
             title=None,
             releaseYear=None,
             revenue=None,
             posterPath=None,
             genres=None,
             cast=None,
-        ),
-        Movie(
-            id="2",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
-        Movie(
-            id="3",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
+        )
+        for id_ in range(1, 4)
     ]
     assert movie_service.errors == [
         {"errorCode": 450, "message": "Movie id #1 details can not be retrieved"},
@@ -371,50 +359,16 @@ def test__MovieService__get_details__for_some_movies(mocker, vin_disiel: CastMem
     movies = movie_service.get_details(movies_ids)
     assert movies == [
         Movie(
-            id="1",
+            id=str(id_),
             title=None,
             releaseYear=None,
             revenue=None,
             posterPath=None,
             genres=None,
             cast=None,
-        ),
-        Movie(
-            id="2",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
-        Movie(
-            id="3",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
-        Movie(
-            id="4",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
-        Movie(
-            id="5",
-            title=None,
-            releaseYear=None,
-            revenue=None,
-            posterPath=None,
-            genres=None,
-            cast=None,
-        ),
+        )
+        for id_ in range(1, 6)
+    ] + [
         Movie(
             id=movie_id,
             title="Fast Furious",
@@ -423,8 +377,9 @@ def test__MovieService__get_details__for_some_movies(mocker, vin_disiel: CastMem
             posterPath="www",
             genres=["Action", "TV Movie"],
             cast=[vin_disiel],
-        ),
+        )
     ]
+
     assert movie_service.errors == [
         {"errorCode": 450, "message": "Movie id #1 details can not be retrieved"},
         {"errorCode": 450, "message": "Movie id #2 details can not be retrieved"},
