@@ -105,12 +105,12 @@ class BaseService:
 class MovieService(BaseService):
     class MovieDetailsResponse(TypedDict):
         id: str
-        title: str
-        releaseDate: str
-        revenue: str
-        posterPath: str
-        genres: List[int]
-        cast: List[int]
+        title: Optional[str]
+        releaseDate: Optional[str]
+        revenue: Optional[str]
+        posterPath: Optional[str]
+        genres: Optional[List[int]]
+        cast: Optional[List[int]]
 
     def list(
         self, genre: Optional[Genre], offset: Optional[int], limit: Optional[int]
@@ -138,38 +138,64 @@ class MovieService(BaseService):
 
         return response.json()["data"]
 
+    def _handle_missing_details(self, movies: List[int]) -> List[MovieDetailsResponse]:
+        logger.warning(
+            f"Movies id's : #{movies} detail info is not completed", movies=movies
+        )
+        details = []
+        for mid in movies:
+            self._add_error(
+                Error(
+                    errorCode=450,
+                    message=f"Movie id #{mid} details can not be retrieved",
+                )
+            )
+            details.append(self.MovieDetailsResponse(id=mid))
+
+        return details
+
     def get_details(self, movies_ids: List[int]) -> List[Movie]:
-        """Given a list of movies id's returns a list with movies details"""
+        """Given a list of movies id's returns a list with movies details.
+
+        If cloudn't get some of the movies details build without it and add error
+        missing information
+        """
         movies_list: list = []
 
         for movies_batch in self.split_list_with_max_length(movies_ids, 5):
             details = self._request_details(movies_batch)
-            if details:
-                movies_detail_batch = self._build_details_from_response(details)
-                movies_list += movies_detail_batch
+            if not details:
+                details = self._handle_missing_details(movies_batch)
+
+            movies_detail_batch = self._build_details_from_response(details)
+            movies_list += movies_detail_batch
 
         return movies_list
 
-    def _request_details(self, movies_ids: List[int]) -> List[MovieDetailsResponse]:
+    def _request_details(
+        self, movies_ids: List[int]
+    ) -> Optional[List[MovieDetailsResponse]]:
+        """Given a list on movies ids return their details"""
         url = self.get_details_url(movies_ids, "http://localhost:3030/movies")
         logger.info("GET movies details", url=unquote(url))
-        response = self.request_until_status_code_is_200(self.client, url)
+        response = self.client.get(url)
 
-        return [
-            self.MovieDetailsResponse(
-                id=movie_res["id"],
-                title=movie_res["title"],
-                releaseDate=movie_res["releaseDate"],
-                revenue=movie_res["revenue"],
-                posterPath=movie_res["posterPath"],
-                genres=movie_res["genres"],
-                cast=movie_res["cast"],
-            )
-            for movie_res in response.json()["data"]
-        ]
+        if response.status_code == 200:
+            return [
+                self.MovieDetailsResponse(
+                    id=movie_res["id"],
+                    title=movie_res["title"],
+                    releaseDate=movie_res["releaseDate"],
+                    revenue=movie_res["revenue"],
+                    posterPath=movie_res["posterPath"],
+                    genres=movie_res["genres"],
+                    cast=movie_res["cast"],
+                )
+                for movie_res in response.json()["data"]
+            ]
 
     def _build_details_from_response(
-        self, response: MovieDetailsResponse
+        self, response: List[MovieDetailsResponse]
     ) -> List[Movie]:
         movies_details: List[Movie] = []
         for res in response:
@@ -192,11 +218,17 @@ class MovieService(BaseService):
 
             movie = Movie(
                 id=mid,
-                title=res["title"],
-                releaseYear=date.fromisoformat(res["releaseDate"]).year,
-                revenue="US$ {:,.0f}".format(res["revenue"]),
-                posterPath=res["posterPath"],
-                genres=get_genres_names_from_list(res["genres"]),
+                title=res.get("title"),
+                releaseYear=date.fromisoformat(res["releaseDate"]).year
+                if res.get("releaseDate")
+                else None,
+                revenue="US$ {:,.0f}".format(res["revenue"])
+                if res.get("revenue") is not None
+                else None,
+                posterPath=res.get("posterPath"),
+                genres=get_genres_names_from_list(res["genres"])
+                if res.get("genres")
+                else None,
                 cast=cast,
             )
             movies_details.append(movie)

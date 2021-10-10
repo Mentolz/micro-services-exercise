@@ -1,7 +1,6 @@
 from urllib.parse import unquote
 
-from pydantic import errors
-from app.schemas import CastMember
+from app.schemas import CastMember, Movie
 from app.services import BaseService, CastService, MovieService, get_genre
 import pytest
 from app.tests.entities import FakeRequestClient, FakeResponse
@@ -32,7 +31,7 @@ from app.tests.entities import FakeRequestClient, FakeResponse
         ),
     ),
 )
-def test__add_query_params_to_url(url, query_params, expected_url):
+def test__BaseService__add_query_params_to_url(url, query_params, expected_url):
     assert MovieService.add_query_params_to_url(url, query_params) == expected_url
 
 
@@ -45,7 +44,7 @@ def test__add_query_params_to_url(url, query_params, expected_url):
         ("TV+Movie", None),
     ),
 )
-def test__get_genre(name, expected_genre):
+def test__BaseService__get_genre(name, expected_genre):
     assert get_genre(name) == expected_genre
 
 
@@ -122,11 +121,11 @@ def test__MovieService__get_details__200_all_details(movies_ids, movies_details)
         ),
     ),
 )
-def test__split_list_with_max_lenght(list_, max_length, expected):
+def test__BaseService__split_list_with_max_lenght(list_, max_length, expected):
     assert BaseService.split_list_with_max_length(list_, max_length) == expected
 
 
-def test__request_unitl_status_code_is_200():
+def test__BaseService__request_unitl_status_code_is_200():
     client = FakeRequestClient(
         responses=[
             FakeResponse(status_code=500),
@@ -154,7 +153,7 @@ def test__request_unitl_status_code_is_200():
         ),
     ),
 )
-def test__get_details_url(ids, url, expected_url):
+def test__BaseService__get_details_url(ids, url, expected_url):
     assert unquote(BaseService.get_details_url(ids, url)) == expected_url
 
 
@@ -181,18 +180,12 @@ def test__get_details_url(ids, url, expected_url):
         ),
     ),
 )
-def test__filter(list_, offset, limit, expected_result):
-    assert MovieService.filter(list_, offset, limit) == expected_result
+def test__BaseService__filter(list_, offset, limit, expected_result):
+    assert BaseService.filter(list_, offset, limit) == expected_result
 
 
-def test__CastService__get_details__incomplete_cast_details():
+def test__CastService__get_details__incomplete_cast_details(vin_disiel):
     cast_ids = [1, 2, 3, 4, 5, 6]
-    vin_disiel = CastMember(
-        id=6,
-        gender="M",
-        name="Vin Disiel",
-        profilePath="www",
-    )
 
     client = FakeRequestClient(
         responses=[
@@ -218,7 +211,7 @@ def test__CastService__get_details__incomplete_cast_details():
     assert cast_service.errors
 
 
-def test__CastService__get_details__full_cast_details():
+def test__CastService__get_details__full_cast_details(vin_disiel):
     cast_ids = [1, 2, 3, 4, 5, 6]
 
     expected_result = [
@@ -252,12 +245,7 @@ def test__CastService__get_details__full_cast_details():
             name="Dwayne Johnson",
             profilePath="www.dwayne-johnson.com",
         ),
-        CastMember(
-            id=6,
-            gender="M",
-            name="Vin Disiel",
-            profilePath="www.vindisel-profile.com",
-        ),
+        vin_disiel,
     ]
 
     client = FakeRequestClient(
@@ -296,3 +284,156 @@ def test__CastService__get_details__full_cast_details():
     details = cast_service.get_details(cast_ids)
     assert details == expected_result
     assert not cast_service.errors
+
+
+def test__MovieService___build_details_from_response():
+    mid = "movie-id-1"
+    fake_response = [MovieService.MovieDetailsResponse(id=mid)]
+    movie_service = MovieService(client=None)
+    movies = movie_service._build_details_from_response(response=fake_response)
+    assert movies == [Movie(id=mid)]
+    assert movie_service.errors == [
+        {"errorCode": 440, "message": "Movie id #movie-id-1 cast info is not complete"}
+    ]
+
+
+def test__MovieService__get_details__couldnt_get_details(mocker):
+    mocker.patch("app.services.MovieService._request_details", return_value=None)
+
+    movie_service = MovieService(client=None)
+
+    movies_ids = [1, 2, 3]
+    movies = movie_service.get_details(movies_ids)
+    assert movies == [
+        Movie(
+            id="1",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="2",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="3",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+    ]
+    assert movie_service.errors == [
+        {"errorCode": 450, "message": "Movie id #1 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #2 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #3 details can not be retrieved"},
+        {"errorCode": 440, "message": "Movie id #1 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #2 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #3 cast info is not complete"},
+    ]
+
+
+def test__MovieService__get_details__for_some_movies(mocker, vin_disiel: CastMember):
+    movie_id = "mid-1"
+    mocker.patch(
+        "app.services.MovieService._request_details",
+        side_effect=[
+            None,
+            [
+                MovieService.MovieDetailsResponse(
+                    id=movie_id,
+                    title="Fast Furious",
+                    releaseDate="2020-02-10",
+                    revenue=1000000,
+                    posterPath="www",
+                    genres=[28, 10770],
+                    cast=[vin_disiel.id],
+                )
+            ],
+        ],
+    )
+
+    mocker.patch("app.services.CastService.get_details", return_value=[vin_disiel])
+
+    movie_service = MovieService(client=None)
+
+    movies_ids = [1, 2, 3, 4, 5, 6]
+    movies = movie_service.get_details(movies_ids)
+    assert movies == [
+        Movie(
+            id="1",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="2",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="3",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="4",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id="5",
+            title=None,
+            releaseYear=None,
+            revenue=None,
+            posterPath=None,
+            genres=None,
+            cast=None,
+        ),
+        Movie(
+            id=movie_id,
+            title="Fast Furious",
+            releaseYear=2020,
+            revenue="US$ 1,000,000",
+            posterPath="www",
+            genres=["Action", "TV Movie"],
+            cast=[vin_disiel],
+        ),
+    ]
+    assert movie_service.errors == [
+        {"errorCode": 450, "message": "Movie id #1 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #2 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #3 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #4 details can not be retrieved"},
+        {"errorCode": 450, "message": "Movie id #5 details can not be retrieved"},
+        {"errorCode": 440, "message": "Movie id #1 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #2 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #3 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #4 cast info is not complete"},
+        {"errorCode": 440, "message": "Movie id #5 cast info is not complete"},
+    ]
