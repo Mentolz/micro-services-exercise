@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Iterable, List, Optional
 from typing_extensions import TypedDict
 import requests
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse, unquote
@@ -12,7 +12,7 @@ from app.schemas import CastMember, Movie
 logger = get_logger()
 
 
-class InterfaceService:
+class BaseService:
     def __init__(self, client: requests) -> None:
         self.client = client
         self.errors: Optional[List[Error]] = None
@@ -48,9 +48,9 @@ class InterfaceService:
 
     @staticmethod
     def get_details_url(ids: List[int], url) -> str:  # TYPING: str[URL]
-        query_params = InterfaceService.build_id_query_params(ids)
+        query_params = BaseService.build_id_query_params(ids)
 
-        return InterfaceService.add_query_params_to_url(url, query_params)
+        return BaseService.add_query_params_to_url(url, query_params)
 
     @staticmethod
     def build_id_query_params(values: List[int]) -> dict:
@@ -89,8 +89,20 @@ class InterfaceService:
 
         return new_list
 
+    @staticmethod
+    def filter(
+        values: Iterable, offset: Optional[int], limit: Optional[int]
+    ) -> Iterable:
+        if offset:
+            values = values[offset:]
 
-class MovieService(InterfaceService):
+        if limit:
+            values = values[:limit]
+
+        return values
+
+
+class MovieService(BaseService):
     class MovieDetailsResponse(TypedDict):
         id: str
         title: str
@@ -100,34 +112,18 @@ class MovieService(InterfaceService):
         genres: List[int]
         cast: List[int]
 
-    def get_total(self, genre: Optional[Genre] = None) -> int:
-        """Get total of movies
-
-        You can Filter by:
-            - genre
-        """
-        return len(self.list_ids(genre))
-
     def list(
-        self, genre: Genre, offset: Optional[int], limit: Optional[int]
-    ) -> List[Movie]:
+        self, genre: Optional[Genre], offset: Optional[int], limit: Optional[int]
+    ) -> tuple[List[Movie], int]:
         """Given a genre list movies"""
         movies_ids = self.list_ids(genre)
-
-        if offset:
-            movies = movies_ids[:offset]
-
-        if limit:
-            movies = movies_ids[limit:]
-
+        total = len(movies_ids)
+        movies_ids = self.filter(movies_ids, offset, limit)
         movies = self.get_details(movies_ids)
 
-        return movies
+        return movies, total
 
-    def list_ids(
-        self,
-        genre: Optional[Genre] = None,  # TODO: confirm
-    ) -> List[int]:
+    def list_ids(self, genre: Optional[Genre] = None) -> List[int]:
         url = "http://localhost:3040/movies"
         query_params = {}
 
@@ -184,7 +180,7 @@ class MovieService(InterfaceService):
                 cast_service = CastService(self.client)
                 cast = cast_service.get_details(cast_ids)
 
-            if not cast:
+            if not cast or cast_service.errors:
                 message = f"Movie id #{mid} cast info is not complete"
                 self._add_error(
                     Error(
@@ -208,10 +204,9 @@ class MovieService(InterfaceService):
         return movies_details
 
 
-class CastService(InterfaceService):
+class CastService(BaseService):
     def get_details(self, cast_ids: List[int]) -> Optional[List[CastMember]]:
         cast: list = []
-
         for cast_batch_ids in self.split_list_with_max_length(cast_ids, 5):
             url = self.get_details_url(cast_batch_ids, "http://localhost:3050/artists")
             response = self.client.get(url)
@@ -228,10 +223,16 @@ class CastService(InterfaceService):
                 ]
             else:
                 logger.warning(
-                    "Cast Details Request Failed",
+                    "Cast details request failed",
                     url=unquote(url),
                     status_code=response.status_code,
                     response=response.text,
+                )
+                self._add_error(
+                    Error(
+                        errorCode=460,
+                        message=f"Cast id's #{cast_batch_ids} details info is not complete",
+                    )
                 )
 
         return cast or None

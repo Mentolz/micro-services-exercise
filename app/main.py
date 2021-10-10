@@ -33,16 +33,15 @@ class MoviesOutput(TypedDict):
 @app.get("/movies", response_model=MoviesOutput)
 def list_movies(
     genre: Optional[str] = None,
-    offset: Optional[int] = 0,  # TODO: review this
+    offset: Optional[int] = 0,
     limit: Optional[int] = 10,
 ):
     movie_service = MovieService(requests)
     if genre:
         genre = get_genre(unquote_plus(genre))
 
-    movies: List[schemas.Movie] = movie_service.list(genre, offset, limit)
+    movies, total = movie_service.list(genre, offset, limit)
     errors = movie_service.errors
-    total = movie_service.get_total(genre)
 
     return MoviesOutput(
         data=DataMovies(movies=movies),
