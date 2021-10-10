@@ -49,36 +49,6 @@ def test__BaseService__get_genre(name, expected_genre):
     assert get_genre(name) == expected_genre
 
 
-@pytest.mark.xfail
-@pytest.mark.parametrize(
-    "genre_name,offset,limit,expected_url",
-    (
-        (
-            "Action",
-            0,
-            10,
-            "http://localhost:3040/movies?genre=Action&offset=0&limit=10",
-        ),
-        ("Action", None, 0, "http://localhost:3040/movies?genre=Action&limit=0"),
-        ("Action", 0, None, "http://localhost:3040/movies?genre=Action&offset=0"),
-        ("Action", None, None, "http://localhost:3040/movies?genre=Action"),
-        (None, 0, 10, "http://localhost:3040/movies?offset=0&limit=10"),
-        (None, None, None, "http://localhost:3040/movies"),
-    ),
-)
-def test__MovieService__list_ids__200(
-    genre_name, offset, limit, expected_url, movies_ids
-):
-    client = FakeRequestClient(
-        responses=[FakeResponse(response={"data": movies_ids}, status_code=200)]
-    )
-    service = MovieService(client=client)
-    genre = get_genre(genre_name)
-
-    assert service.list_ids(genre, offset, limit) == movies_ids
-    assert client.url == expected_url
-
-
 def test__MovieService__list_ids__500_at_first_attempt(movies_ids):
     client = FakeRequestClient(
         responses=[
@@ -91,20 +61,6 @@ def test__MovieService__list_ids__500_at_first_attempt(movies_ids):
 
     assert service.list_ids(genre) == movies_ids
     assert client.called == 2
-
-
-@pytest.mark.xfail
-def test__MovieService__get_details__200_all_details(movies_ids, movies_details):
-    client = FakeRequestClient(
-        responses=[
-            FakeResponse(
-                response={"data": movies_details},
-                status_code=200,
-            )
-        ]
-    )
-
-    assert MovieService(client).get_details(movies_ids) == movies_details
 
 
 @pytest.mark.parametrize(

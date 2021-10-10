@@ -97,3 +97,7 @@ def test__list_movies(mocker, client):
         "metadata": {"offset": offset, "limit": limit, "total": total},
         "errors": None,
     }
+
+
+def test__health_check(client):
+    assert client.get("/").status_code == 200
