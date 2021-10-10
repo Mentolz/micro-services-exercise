@@ -1,4 +1,4 @@
-from app.services import MovieService
+from app.services import InterfaceService, MovieService, get_genre
 import pytest
 from typing import Optional, List
 
@@ -42,7 +42,7 @@ def test__add_query_params_to_url(url, query_params, expected_url):
     ),
 )
 def test__get_genre(name, expected_genre):
-    assert MovieService.get_genre(name) == expected_genre
+    assert get_genre(name) == expected_genre
 
 
 class FakeResponse:
@@ -51,6 +51,7 @@ class FakeResponse:
     ) -> None:
         self._response = response
         self.status_code = status_code
+        self.text = "Internal Server Error"
 
     def json(self):
         return self._response
@@ -98,7 +99,7 @@ def test__MovieService__list_ids__200(
         responses=[FakeResponse(response={"data": movies_ids}, status_code=200)]
     )
     service = MovieService(client=client)
-    genre = service.get_genre(genre_name)
+    genre = get_genre(genre_name)
 
     assert service.list_ids(genre, offset, limit) == movies_ids
     assert client.url == expected_url
@@ -112,15 +113,14 @@ def test__MovieService__list_ids__500_at_first_attempt(movies_ids):
         ]
     )
     service = MovieService(client=client)
-    genre = service.get_genre("Action")
+    genre = get_genre("Action")
 
     assert service.list_ids(genre) == movies_ids
     assert client.called == 2
 
 
-def test__MovieService__get_details__200_all_details(
-    movies_ids, movies_details
-):
+@pytest.mark.xfail
+def test__MovieService__get_details__200_all_details(movies_ids, movies_details):
     client = FakeRequestClient(
         responses=[
             FakeResponse(
@@ -132,3 +132,21 @@ def test__MovieService__get_details__200_all_details(
 
     assert MovieService(client).get_details(movies_ids) == movies_details
 
+
+@pytest.mark.parametrize(
+    "list_,max_length,expected",
+    (
+        (
+            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            3,
+            [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+        ),
+        (
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            3,
+            [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]],
+        ),
+    ),
+)
+def test__split_list_with_max_lenght(list_, max_length, expected):
+    assert InterfaceService.split_list_with_max_length(list_, max_length) == expected

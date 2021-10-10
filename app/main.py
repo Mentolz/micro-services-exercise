@@ -2,7 +2,7 @@ from typing import Optional, TypedDict, List
 from app import schemas
 from fastapi import FastAPI
 import requests
-from app.services import MovieService
+from app.services import MovieService, get_genre
 from app.entities import Error
 from urllib.parse import unquote_plus
 
@@ -38,7 +38,7 @@ def list_movies(
 ):
     movie_service = MovieService(requests)
     if genre:
-        genre = movie_service.get_genre(unquote_plus(genre))
+        genre = get_genre(unquote_plus(genre))
 
     movies: List[schemas.Movie] = movie_service.list(genre, offset=offset, limit=limit)
     errors: List[Error] = movie_service.errors

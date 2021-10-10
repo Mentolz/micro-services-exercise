@@ -7,13 +7,90 @@ from app.entities import GENRES_MAP
 from structlog import get_logger
 from app.entities import Error
 from datetime import date
-from app.schemas import Cast, Movie
-import json
+from app.schemas import CastMember, Movie
 
 logger = get_logger()
 
 
-class MovieService:
+class InterfaceService:
+    def __init__(self, client: requests) -> None:
+        self.client = client
+        self.errors: List[Error] = None
+
+    def _add_error(self, error: Error) -> None:
+        if self.errors is None:
+            self.errors = [error]
+        else:
+            self.errors.append(error)
+
+    @staticmethod
+    def request_until_status_code_is_200(client, url) -> dict:
+        status_code = None
+        while status_code != 200:
+            response = client.get(url)
+            if (status_code := response.status_code) == 200:
+                break
+
+            logger.error(
+                "Response Error",
+                status_code=status_code,
+                url=url,
+                response=response.text,
+            )
+
+        logger.info(
+            "Response Sucessfull",
+            url=unquote(url),
+            status_code=status_code,
+            response=response.json(),
+        )
+        return response
+
+    @staticmethod
+    def get_details_url(ids: List[int], url) -> str:  # TYPING: str[URL]
+        query_params = InterfaceService.build_id_query_params(ids)
+
+        return InterfaceService.add_query_params_to_url(url, query_params)
+
+    @staticmethod
+    def build_id_query_params(values: List[int]) -> dict:
+        """Build query params for id in singular or multiples ids
+
+        Given values with:
+            * one id: return {'id': ...}
+            * multiples ids: return {'ids': ...}
+        """
+
+        if len(values) == 1:
+            return {"id": str(values[0])}
+
+        return {"ids": ",".join([str(m) for m in values])}
+
+    @staticmethod
+    def add_query_params_to_url(url: str, query_params: dict) -> str:
+        """Add query_params dict to the url"""
+        url_parts = list(urlparse(url))
+        query = dict(parse_qsl(url_parts[4]))
+        query.update(query_params)
+        url_parts[4] = urlencode(query)
+
+        return urlunparse(url_parts)
+
+    @staticmethod
+    def split_list_with_max_length(list_, max_length) -> List[List[int]]:
+        new_list: list = []
+
+        while list_:
+            new_list.append(list_[:max_length])
+            for _ in range(max_length):
+                if not list_:
+                    break
+                list_.pop(0)
+
+        return new_list
+
+
+class MovieService(InterfaceService):
     class MovieDetailsResponse(TypedDict):
         id: str
         title: str
@@ -22,16 +99,6 @@ class MovieService:
         posterPath: str
         genres: List[int]
         cast: List[int]
-
-    def __init__(self, client: requests) -> None:
-        self.client = client
-        self.errors: List[Error] = None
-
-    def add_error(self, error: Error) -> None:
-        if self.errors is None:
-            self.errors = [error]
-        else:
-            self.errors.append(error)
 
     def list(self, genre: Genre, offset: int, limit: int) -> List[Movie]:
         """Given a genre list movies"""
@@ -66,57 +133,21 @@ class MovieService:
 
         return response.json()["data"]
 
-    @staticmethod
-    def request_until_status_code_is_200(client, url) -> dict:
-        status_code = None
-        while status_code != 200:
-            response = client.get(url)
-            if (status_code := response.status_code) == 200:
-                break
+    def get_details(self, movies_ids: List[int]) -> List[Movie]:
+        """Given a list of movies id's returns a list with movies details"""
+        movies_list: list = []
 
-            logger.error(
-                "Response Error",
-                status_code=status_code,
-                url=url,
-                response=response.text,
-            )
+        for movies_batch in self.split_list_with_max_length(movies_ids, 5):
+            details = self._request_details(movies_batch)
+            if details:
+                movies_detail_batch = self._build_details_from_response(details)
+                movies_list += movies_detail_batch
 
-        logger.info(
-            "Response Sucessfull",
-            url=unquote(url),
-            status_code=status_code,
-            response=response.json(),
-        )
-        return response
+        return movies_list
 
-    @staticmethod
-    def build_id_query_params(values: List[int]) -> dict:
-        """Build query params for id in singular or multiples ids
-
-        Given values with:
-            * one id: return {'id': ...}
-            * multiples ids: return {'ids': ...}
-        """
-
-        if len(values) == 1:
-            return {"id": str(values[0])}
-
-        return {"ids": ",".join([str(m) for m in values])}
-
-    @staticmethod
-    def build_details_url(movies_ids: List[int]) -> str:  # TYPING: str[URL]
-        url = "http://localhost:3030/movies"
-        query_params = MovieService.build_id_query_params(movies_ids)
-
-        return MovieService.add_query_params_to_url(url, query_params)
-
-    def handle_details_request(
-        self, movies_ids: List[int]
-    ) -> List[MovieDetailsResponse]:
-        url = self.build_details_url(movies_ids)
+    def _request_details(self, movies_ids: List[int]) -> List[MovieDetailsResponse]:
+        url = self.get_details_url(movies_ids, "http://localhost:3030/movies")
         logger.info("GET movies details", url=unquote(url))
-        response = self.client.get(url)
-
         response = self.request_until_status_code_is_200(self.client, url)
 
         return [
@@ -132,7 +163,7 @@ class MovieService:
             for movie_res in response.json()["data"]
         ]
 
-    def build_movie_details_from_response(
+    def _build_details_from_response(
         self, response: MovieDetailsResponse
     ) -> List[Movie]:
         movies_details: List[Movie] = []
@@ -141,15 +172,19 @@ class MovieService:
 
             cast = None
             if cast_ids := res.get("cast"):
-                cast = self.get_cast(cast_ids)
+                cast_service = CastService(self.client)
+                cast = cast_service.get_details(cast_ids)
 
-            if not cast:
-                self.add_error(
+            if not cast or cast_service.errors:
+                message = f"Movie id #{mid} cast info is not complete"
+                self._add_error(
                     Error(
                         errorCode=440,
-                        message=f"Movie id #{mid} cast info is not complete",
+                        message=message,
                     )
                 )
+                logger.warning(message, id=mid, cast_ids=cast_ids)
+
 
             movie = Movie(
                 id=mid,
@@ -157,55 +192,54 @@ class MovieService:
                 releaseYear=date.fromisoformat(res["releaseDate"]).year,
                 revenue="US$ {:,.0f}".format(res["revenue"]),
                 posterPath=res["posterPath"],
-                genres=self.get_genres_names_from_list(res["genres"]),
+                genres=get_genres_names_from_list(res["genres"]),
                 cast=cast,
             )
             movies_details.append(movie)
 
         return movies_details
 
-    def get_details(self, movies_ids: List[int]) -> List[Movie]:
-        """Given a list of movies id's returns a list with movies details"""
-        # FIXME: can not send more than 5 movides_ids
 
-        movies_list: list = []
+class CastService(InterfaceService):
+    def get_details(self, cast_ids: List[int]) -> Optional[List[CastMember]]:
+        cast: list = []
 
-        while movies_ids:
-            movies_batch = movies_ids[:5]
+        for cast_batch_ids in self.split_list_with_max_length(cast_ids, 5):
+            url = self.get_details_url(cast_batch_ids, "http://localhost:3050/artists")
+            response = self.client.get(url)
 
-            if response := self.handle_details_request(movies_batch):
-                movies_detail_batch = self.build_movie_details_from_response(response)
-                movies_list += movies_detail_batch
+            if response.status_code == 200:
+                cast += [
+                    CastMember(
+                        id=member["id"],
+                        gender=member["gender"],
+                        name=member["name"],
+                        profilePath=member["profilePath"],
+                    )
+                    for member in response.json()["data"]
+                ]
+            else:
+                logger.warning(
+                    "Cast Details Request Failed",
+                    url=unquote(url),
+                    status_code=response.status_code,
+                    response=response.text,
+                )
+                self._add_error(
+                    Error(
+                        errorCode=460,
+                        message=f"Cloudn't get cast info for ids: #{cast_batch_ids}",
+                    )
+                )
 
-            for _ in range(5):
-                if not movies_ids:
-                    break
-                movies_ids.pop(0)
+        return cast or None
 
-        return movies_list
 
-    def get_cast(self, cast_list: List[int]) -> Optional[List[Cast]]:
-        # TODO
-        return
+def get_genre(name: str) -> Optional[Genre]:
+    for genre in GENRES_MAP:
+        if name == genre["name"]:
+            return Genre(id=genre["id"], name=genre["name"])
 
-    @staticmethod
-    def add_query_params_to_url(url: str, query_params: dict) -> str:
-        """Add query_params dict to the url"""
-        url_parts = list(urlparse(url))
-        query = dict(parse_qsl(url_parts[4]))
-        query.update(query_params)
-        url_parts[4] = urlencode(query)
 
-        return urlunparse(url_parts)
-
-    @staticmethod
-    def get_genres_names_from_list(genres: List[int]) -> Optional[List[Genre]]:
-        return [
-            MovieService.get_genre(g).name for g in genres if MovieService.get_genre(g)
-        ]
-
-    @staticmethod
-    def get_genre(name: str) -> Optional[Genre]:
-        for genre in GENRES_MAP:
-            if name == genre["name"]:
-                return Genre(id=genre["id"], name=genre["name"])
+def get_genres_names_from_list(ids_list: List[int]) -> Optional[List[Genre.__name__]]:
+    return [genre["name"] for genre in GENRES_MAP if genre["id"] in ids_list]

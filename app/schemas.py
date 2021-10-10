@@ -2,10 +2,9 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from pydantic.fields import Field
-from app.entities import Genre
 
 
-class Cast(BaseModel):
+class CastMember(BaseModel):
     id: str = Field(..., example="3896")
     gender: str = Field(..., example="Male")
     name: str = Field(..., example="Liam Neeson")
@@ -22,7 +21,7 @@ class Movie(BaseModel):
     posterPath: str = Field(
         ..., example="https://image.tmdb.org/t/p/w342/n8V09dDc02KsSN6Q4hC2BX6hN8X.jpg"
     )
-    genres: List[Genre.__name__] = Field(
+    genres: List[str] = Field(  # TYPING: List[Gender.name]
         None, example=["Adventure", "Action", "Science Fiction"]
     )
-    cast: Optional[List[Cast]]
+    cast: Optional[List[CastMember]]
