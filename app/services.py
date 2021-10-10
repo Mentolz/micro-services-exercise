@@ -15,7 +15,7 @@ logger = get_logger()
 class InterfaceService:
     def __init__(self, client: requests) -> None:
         self.client = client
-        self.errors: List[Error] = None
+        self.errors: Optional[List[Error]] = None
 
     def _add_error(self, error: Error) -> None:
         if self.errors is None:
@@ -100,9 +100,26 @@ class MovieService(InterfaceService):
         genres: List[int]
         cast: List[int]
 
-    def list(self, genre: Genre, offset: int, limit: int) -> List[Movie]:
+    def get_total(self, genre: Optional[Genre] = None) -> int:
+        """Get total of movies
+
+        You can Filter by:
+            - genre
+        """
+        return len(self.list_ids(genre))
+
+    def list(
+        self, genre: Genre, offset: Optional[int], limit: Optional[int]
+    ) -> List[Movie]:
         """Given a genre list movies"""
-        movies_ids = self.list_ids(genre, offset=offset, limit=limit)
+        movies_ids = self.list_ids(genre)
+
+        if offset:
+            movies = movies_ids[:offset]
+
+        if limit:
+            movies = movies_ids[limit:]
+
         movies = self.get_details(movies_ids)
 
         return movies
@@ -110,20 +127,12 @@ class MovieService(InterfaceService):
     def list_ids(
         self,
         genre: Optional[Genre] = None,  # TODO: confirm
-        offset: Optional[int] = None,
-        limit: Optional[int] = None,
     ) -> List[int]:
         url = "http://localhost:3040/movies"
         query_params = {}
 
         if genre:
             query_params["genre"] = genre["name"]
-
-        if offset is not None:
-            query_params["offset"] = offset
-
-        if limit is not None:
-            query_params["limit"] = limit
 
         if query_params:
             url = self.add_query_params_to_url(url, query_params)
@@ -175,7 +184,7 @@ class MovieService(InterfaceService):
                 cast_service = CastService(self.client)
                 cast = cast_service.get_details(cast_ids)
 
-            if not cast or cast_service.errors:
+            if not cast:
                 message = f"Movie id #{mid} cast info is not complete"
                 self._add_error(
                     Error(
@@ -184,7 +193,6 @@ class MovieService(InterfaceService):
                     )
                 )
                 logger.warning(message, id=mid, cast_ids=cast_ids)
-
 
             movie = Movie(
                 id=mid,
@@ -224,12 +232,6 @@ class CastService(InterfaceService):
                     url=unquote(url),
                     status_code=response.status_code,
                     response=response.text,
-                )
-                self._add_error(
-                    Error(
-                        errorCode=460,
-                        message=f"Cloudn't get cast info for ids: #{cast_batch_ids}",
-                    )
                 )
 
         return cast or None

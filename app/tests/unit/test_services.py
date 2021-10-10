@@ -1,6 +1,7 @@
+from urllib.parse import unquote
 from app.services import InterfaceService, MovieService, get_genre
 import pytest
-from typing import Optional, List
+from app.tests.entities import FakeRequestClient, FakeResponse
 
 
 @pytest.mark.parametrize(
@@ -45,37 +46,7 @@ def test__get_genre(name, expected_genre):
     assert get_genre(name) == expected_genre
 
 
-class FakeResponse:
-    def __init__(
-        self, response: Optional[dict] = None, status_code: Optional[int] = None
-    ) -> None:
-        self._response = response
-        self.status_code = status_code
-        self.text = "Internal Server Error"
-
-    def json(self):
-        return self._response
-
-
-class FakeRequestClient:
-    def __init__(self, responses: List[FakeResponse] = None) -> None:
-        self._responses = responses
-        self.url = None
-        self.data = None
-        self.called = 0
-
-    def get(self, url: str, data: Optional[dict] = None) -> FakeResponse:
-        self.url = url
-        self.data = data
-        self.called += 1
-
-        response = (
-            self._responses.pop(0) if len(self._responses) > 1 else self._responses[0]
-        )
-
-        return response
-
-
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "genre_name,offset,limit,expected_url",
     (
@@ -150,3 +121,35 @@ def test__MovieService__get_details__200_all_details(movies_ids, movies_details)
 )
 def test__split_list_with_max_lenght(list_, max_length, expected):
     assert InterfaceService.split_list_with_max_length(list_, max_length) == expected
+
+
+def test__request_unitl_status_code_is_200():
+    client = FakeRequestClient(
+        responses=[
+            FakeResponse(status_code=500),
+            FakeResponse(status_code=500),
+            FakeResponse(status_code=200),
+            FakeResponse(status_code=500),
+        ]
+    )
+    InterfaceService.request_until_status_code_is_200(client, url="")
+    assert client.called == 3
+
+
+@pytest.mark.parametrize(
+    "ids,url,expected_url",
+    (
+        (
+            [1, 2, 3],
+            "http://localhost:3040/movies",
+            "http://localhost:3040/movies?ids=1,2,3",
+        ),
+        (
+            [1],
+            "http://localhost:3040/movies",
+            "http://localhost:3040/movies?id=1",
+        ),
+    ),
+)
+def test__get_details_url(ids, url, expected_url):
+    assert unquote(InterfaceService.get_details_url(ids, url)) == expected_url
