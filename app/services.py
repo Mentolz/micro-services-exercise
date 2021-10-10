@@ -26,12 +26,11 @@ class BaseService:
     @staticmethod
     def request_until_status_code_is_200(client, url) -> dict:
         status_code = None
-        count = 0
-        while status_code != 200 or count < 15:
+
+        while status_code != 200:
             response = client.get(url)
             if (status_code := response.status_code) == 200:
                 break
-            count += 1
 
             logger.error(
                 "Response Error",
