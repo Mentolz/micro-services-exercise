@@ -7,12 +7,14 @@ services:
     environment: 
      - FAIL_PERCENT=0.2
      - MAX_ALLOWED=5
+
   moviesearch:
     image: "keremk/moviesearch:v0.5"
     ports:
      - "3040:3030"
     environment: 
      - FAIL_PERCENT=0.1
+
   artistinfo:
     image: "keremk/artistinfo:v0.4"
     ports:
@@ -20,5 +22,14 @@ services:
     environment: 
      - FAIL_PERCENT=0.5
      - MAX_ALLOWED=5
-  
+
+  moviegendersearch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: bash -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000"
  
